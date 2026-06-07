@@ -89,6 +89,54 @@ Training loop (external)
 
 ---
 
+## Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant T as Trainer (external)
+    participant O as Optimizer (e.g. Adam)
+    participant P as Parameters (Vec<&mut Tensor>)
+    participant GC as clip_grad_norm
+    participant S as LRScheduler
+
+    T->>O: zero_grad(params)
+    O->>P: set grad = None on each Tensor
+
+    Note over T: forward + tape::backward fills .grad
+
+    T->>GC: clip_grad_norm(params, max_norm)
+    GC->>P: compute global L2 norm of all grads
+    GC->>P: rescale grads in-place if norm > max_norm
+
+    T->>O: step(params)
+    loop each (param, moment_m, moment_v) by index
+        O->>P: read param.grad
+        O->>O: update moment estimates m, v
+        O->>P: write param.data -= lr * m_hat / (sqrt(v_hat) + eps)
+    end
+
+    T->>S: step(&mut opt)
+    S->>O: set_lr(new_lr)
+    S->>S: increment internal step counter
+```
+
+## Dataflow Diagram
+
+```mermaid
+flowchart TD
+    A["Parameters<br/>Vec&lt;&mut Tensor&gt;<br/>each: .data + .grad populated by backward"] --> B["clip_grad_norm<br/>IN: params, max_norm: f32<br/>OUT: params (grads rescaled in-place)"]
+    B --> C["Optimizer::step<br/>IN: params<br/>IN: moment state (m, v per param)"]
+    C --> D["Updated Parameters<br/>.data modified in-place<br/>.grad cleared"]
+    C --> E["Updated Moment State<br/>m[i], v[i] incremented<br/>step_count += 1"]
+
+    F["LRScheduler::step<br/>IN: &mut dyn Optimizer<br/>IN: internal step counter"] --> G["Optimizer::set_lr<br/>IN: new_lr: f32"]
+    G --> H["Next Iteration LR<br/>applied on next step() call"]
+
+    D --> I["Next Forward Pass"]
+```
+
+---
+
 ## Design Decisions
 
 1. **`Optimizer` trait operates on `&mut [&mut Tensor]`** — no lifetime coupling to a specific model type. The caller assembles the parameter slice each step; the optimizer holds only scalar state and moment vectors.
