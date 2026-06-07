@@ -1,5 +1,5 @@
-use crate::lr_scheduler::LRScheduler;
-use crate::optimizer::Optimizer;
+use crate::api::lr_scheduler::LRScheduler;
+use crate::api::optimizer::Optimizer;
 
 /// StepLR -- Decay by gamma every step_size steps.
 pub struct StepLR {

@@ -1,5 +1,5 @@
 use mlautograd::{MlResult, Tensor, TensorId, tape};
-use crate::optimizer::Optimizer;
+use crate::api::optimizer::Optimizer;
 use std::collections::HashMap;
 
 pub struct SGD {

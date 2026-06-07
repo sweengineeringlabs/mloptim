@@ -20,46 +20,50 @@
 
 ```
 mloptim
-├── lib.rs                        (public facade — re-exports all public types)
+├── lib.rs                        (crate root — declares api/core as private, saf as public; re-exports saf::*)
 │
-├── optimizer.rs                  [Optimizer trait]
-│   └── step(&mut [&mut Tensor])
-│   └── zero_grad(&mut [&mut Tensor])
-│   └── lr() -> f32
-│   └── set_lr(f32)
+├── api/                          [public traits; no deps on core/]
+│   ├── optimizer.rs              [Optimizer trait]
+│   │   └── step(&mut [&mut Tensor])
+│   │   └── lr() -> f32
+│   │   └── set_lr(f32)
+│   └── lr_scheduler.rs           [LRScheduler trait]
+│       └── step(&mut dyn Optimizer)
+│       └── get_lr() -> f32
 │
-├── lr_scheduler.rs               [LRScheduler trait]
-│   └── step(&mut dyn Optimizer)
-│   └── get_lr() -> f32
-│   └── last_lr() -> f32
+├── core/                         [implementations; not re-exported directly from lib.rs]
+│   ├── optimizers/
+│   │   ├── adam.rs       → Adam       (m, v moment vecs; bias correction)
+│   │   ├── adamw.rs      → AdamW      (decoupled weight decay)
+│   │   ├── sgd.rs        → SGD        (velocity vec; optional momentum)
+│   │   └── grad_clip.rs  → clip_grad_norm, clip_grad_value  (free functions)
+│   └── schedulers/
+│       ├── step_lr.rs                 → StepLR
+│       ├── cosine_annealing_lr.rs     → CosineAnnealingLR
+│       └── warmup_cosine_scheduler.rs → WarmupCosineScheduler
 │
-├── optimizers/
-│   ├── adam.rs       → Adam       (m, v moment vecs; bias correction)
-│   ├── adamw.rs      → AdamW      (decoupled weight decay)
-│   ├── sgd.rs        → SGD        (velocity vec; optional momentum)
-│   └── grad_clip.rs  → clip_grad_norm, clip_grad_value  (free functions)
-│
-└── schedulers/
-    ├── step_lr.rs                 → StepLR
-    ├── cosine_annealing_lr.rs     → CosineAnnealingLR
-    └── warmup_cosine_scheduler.rs → WarmupCosineScheduler
+└── saf/                          [sole public re-export surface]
+    └── mod.rs                    (re-exports Optimizer, LRScheduler, Adam, AdamW, SGD,
+                                   clip_grad_norm, clip_grad_value, StepLR,
+                                   CosineAnnealingLR, WarmupCosineScheduler)
 ```
 
 ---
 
 ## Layer Responsibilities
 
-| Module | Responsibility |
-|--------|---------------|
-| `optimizer.rs` | Defines the `Optimizer` trait contract; all parameter updates flow through `step` |
-| `lr_scheduler.rs` | Defines the `LRScheduler` trait contract; schedulers mutate the optimizer's LR via `set_lr` |
-| `optimizers/adam.rs` | Stores per-parameter first and second moment vectors (`Vec<Vec<f32>>`); applies bias-corrected Adam update |
-| `optimizers/adamw.rs` | Extends Adam with decoupled weight decay applied directly to parameters before the moment update |
-| `optimizers/sgd.rs` | Stores per-parameter velocity vectors; applies SGD update with optional momentum scaling |
-| `optimizers/grad_clip.rs` | Free functions that compute global gradient norms and clip in-place before the optimizer step |
-| `schedulers/step_lr.rs` | Multiplies the current LR by gamma every N steps |
-| `schedulers/cosine_annealing_lr.rs` | Anneals LR along a cosine curve from `lr_max` to `lr_min` over T_max steps |
-| `schedulers/warmup_cosine_scheduler.rs` | Applies linear warmup for the first N steps then transitions to cosine decay for the remainder |
+| Layer | Module | Responsibility |
+|-------|--------|---------------|
+| `api` | `api/optimizer.rs` | Defines the `Optimizer` trait contract; all parameter updates flow through `step`; no deps on `core` |
+| `api` | `api/lr_scheduler.rs` | Defines the `LRScheduler` trait contract; schedulers mutate the optimizer's LR via `set_lr`; no deps on `core` |
+| `core` | `core/optimizers/adam.rs` | Stores per-parameter first and second moment vectors (`Vec<Vec<f32>>`); applies bias-corrected Adam update |
+| `core` | `core/optimizers/adamw.rs` | Extends Adam with decoupled weight decay applied directly to parameters before the moment update |
+| `core` | `core/optimizers/sgd.rs` | Stores per-parameter velocity vectors; applies SGD update with optional momentum scaling |
+| `core` | `core/optimizers/grad_clip.rs` | Free functions that compute global gradient norms and clip in-place before the optimizer step |
+| `core` | `core/schedulers/step_lr.rs` | Multiplies the current LR by gamma every N steps |
+| `core` | `core/schedulers/cosine_annealing_lr.rs` | Anneals LR along a cosine curve from `lr_max` to `lr_min` over T_max steps |
+| `core` | `core/schedulers/warmup_cosine_scheduler.rs` | Applies linear warmup for the first N steps then transitions to cosine decay for the remainder |
+| `saf` | `saf/mod.rs` | Sole public re-export surface; assembles the crate's public API from `api` and `core` without exposing internal module paths |
 
 ---
 
@@ -150,6 +154,21 @@ flowchart TD
 5. **`WarmupCosineScheduler` embeds warmup steps and total steps at construction** — avoids requiring a global step counter in the trainer. The scheduler is fully self-contained and produces a deterministic LR given only the number of times `step` has been called.
 
 ---
+
+## Cross-Cutting Concerns
+
+### Security
+- No external input — optimizer operates on in-process parameter tensors only
+- No global mutable state — all optimizer state (moments, step count) lives inside the concrete struct
+
+### Error Handling
+- `Optimizer::step` is infallible — parameter updates never fail; config errors (e.g. negative LR) fail at construction
+- Gradient clipping (`clip_grad_norm`) is a pure in-place function; callers decide when and whether to apply it
+
+### Performance
+- Per-parameter moment state stored as `Vec<Vec<f32>>` indexed by position — sequential access is cache-friendly
+- No per-step allocations — moment vectors are pre-sized at construction; `step` only reads and writes existing entries
+- `LRScheduler` is a separate object — scheduling overhead is zero when no scheduler is used
 
 ## Integration Points
 

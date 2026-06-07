@@ -1,12 +1,12 @@
 use mlautograd::{MlResult, Tensor, TensorId, tape};
-use crate::optimizer::Optimizer;
+use crate::api::optimizer::Optimizer;
 use std::collections::HashMap;
 
-/// Adam optimizer (Kingma & Ba, 2014).
+/// AdamW optimizer (Loshchilov & Hutter, 2017).
 ///
-/// Implements the Adam algorithm with optional L2 weight decay applied as a
-/// gradient penalty. For decoupled weight decay, see `AdamW`.
-pub struct Adam {
+/// Implements Adam with *decoupled* weight decay. Weight decay is applied
+/// directly to the parameters before the adaptive update step.
+pub struct AdamW {
     learning_rate: f32,
     beta1: f32,
     beta2: f32,
@@ -20,14 +20,14 @@ pub struct Adam {
     v: HashMap<TensorId, Tensor>,
 }
 
-impl Adam {
+impl AdamW {
     pub fn new(learning_rate: f32) -> Self {
         Self {
             learning_rate,
             beta1: 0.9,
             beta2: 0.999,
             epsilon: 1e-8,
-            weight_decay: 0.0,
+            weight_decay: 0.01,
             t: 0,
             m: HashMap::new(),
             v: HashMap::new(),
@@ -51,19 +51,21 @@ impl Adam {
     }
 }
 
-impl Optimizer for Adam {
+impl Optimizer for AdamW {
     fn step(&mut self, params: &mut [&mut Tensor]) -> MlResult<()> {
         self.t += 1;
         let t = self.t;
 
         for param in params.iter_mut() {
-            if let Some(mut grad) = tape::grad(param) {
+            if let Some(grad) = tape::grad(param) {
                 let param_id = param.id();
                 let param_shape = param.shape().to_vec();
 
+                // Decoupled weight decay: param -= lr * weight_decay * param
                 if self.weight_decay > 0.0 {
-                    let decay_term = param.mul_scalar_raw(self.weight_decay);
-                    grad = grad.add_raw(&decay_term)?;
+                    let decay = param.mul_scalar_raw(self.learning_rate * self.weight_decay);
+                    let decayed_param = param.sub_raw(&decay)?;
+                    param.update_data_from(&decayed_param);
                 }
 
                 if !self.m.contains_key(&param_id) {
@@ -118,42 +120,41 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_adam_new_defaults() {
-        let adam = Adam::new(0.001);
-        assert!((adam.lr() - 0.001).abs() < f32::EPSILON);
-        assert!((adam.beta1 - 0.9).abs() < f32::EPSILON);
-        assert!((adam.beta2 - 0.999).abs() < f32::EPSILON);
+    fn test_adamw_new_defaults() {
+        let adamw = AdamW::new(0.001);
+        assert!((adamw.lr() - 0.001).abs() < f32::EPSILON);
+        assert!((adamw.weight_decay - 0.01).abs() < f32::EPSILON);
     }
 
     #[test]
-    fn test_adam_with_betas() {
-        let adam = Adam::new(0.001).with_betas(0.8, 0.99);
-        assert!((adam.beta1 - 0.8).abs() < f32::EPSILON);
-        assert!((adam.beta2 - 0.99).abs() < f32::EPSILON);
+    fn test_adamw_with_betas() {
+        let adamw = AdamW::new(0.001).with_betas(0.85, 0.99);
+        assert!((adamw.beta1 - 0.85).abs() < f32::EPSILON);
+        assert!((adamw.beta2 - 0.99).abs() < f32::EPSILON);
     }
 
     #[test]
-    fn test_adam_with_epsilon() {
-        let adam = Adam::new(0.001).with_epsilon(1e-7);
-        assert!((adam.epsilon - 1e-7).abs() < 1e-12);
+    fn test_adamw_with_epsilon() {
+        let adamw = AdamW::new(0.001).with_epsilon(1e-7);
+        assert!((adamw.epsilon - 1e-7).abs() < 1e-12);
     }
 
     #[test]
-    fn test_adam_with_weight_decay() {
-        let adam = Adam::new(0.001).with_weight_decay(0.01);
-        assert!((adam.weight_decay - 0.01).abs() < f32::EPSILON);
+    fn test_adamw_with_weight_decay() {
+        let adamw = AdamW::new(0.001).with_weight_decay(0.05);
+        assert!((adamw.weight_decay - 0.05).abs() < f32::EPSILON);
     }
 
     #[test]
-    fn test_adam_lr_returns_learning_rate() {
-        let adam = Adam::new(0.01);
-        assert!((adam.lr() - 0.01).abs() < f32::EPSILON);
+    fn test_adamw_set_lr() {
+        let mut adamw = AdamW::new(0.001);
+        adamw.set_lr(0.0001);
+        assert!((adamw.lr() - 0.0001).abs() < f32::EPSILON);
     }
 
     #[test]
-    fn test_adam_set_lr_updates_value() {
-        let mut adam = Adam::new(0.01);
-        adam.set_lr(0.001);
-        assert!((adam.lr() - 0.001).abs() < f32::EPSILON);
+    fn test_adamw_lr_returns_learning_rate() {
+        let adamw = AdamW::new(0.01);
+        assert!((adamw.lr() - 0.01).abs() < f32::EPSILON);
     }
 }

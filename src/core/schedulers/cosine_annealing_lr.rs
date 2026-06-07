@@ -1,6 +1,6 @@
 use std::f32::consts::PI;
-use crate::lr_scheduler::LRScheduler;
-use crate::optimizer::Optimizer;
+use crate::api::lr_scheduler::LRScheduler;
+use crate::api::optimizer::Optimizer;
 
 /// CosineAnnealingLR -- Cosine decay to eta_min.
 pub struct CosineAnnealingLR {
