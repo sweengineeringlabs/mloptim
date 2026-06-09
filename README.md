@@ -6,6 +6,7 @@
 - [Quick Start](#quick-start)
 - [API](#api)
 - [Documentation](#documentation)
+- [Development](#development)
 
 ## Quick Start
 
@@ -28,7 +29,7 @@ opt.step(&mut model.parameters_mut());
 | `Adam` | Adaptive moment estimation optimizer (default choice for most tasks) |
 | `AdamW` | Adam with decoupled weight decay (preferred for transformers) |
 | `SGD` | Stochastic gradient descent with optional momentum |
-| `clip_grad_norm` | Clip gradient L2 norm to a maximum value |
+| `GradClipper` | Clip gradients by L2 norm (`clip_grad_norm`) or element-wise value (`clip_grad_value`) |
 | `WarmupCosineScheduler` | Linear warmup then cosine annealing, used in LLM training |
 
 ## Documentation
@@ -36,6 +37,16 @@ opt.step(&mut model.parameters_mut());
 - [Overview](docs/README.md) - W³H
 - [Architecture](docs/3-design/architecture.md) - System design
 - [Integration](docs/3-design/integration.md) - Integration guide
+
+## Development
+
+After cloning, activate the commit-msg hook:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+The hook rejects commits that carry AI-assistant attribution (Co-Authored-By trailers, "Generated with …" footers, 🤖 emoji). The same check runs server-side via `.github/workflows/no-ai-attribution.yml` and cannot be bypassed with `--no-verify`.
 
 ## Related FRs
 
