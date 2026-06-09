@@ -1,9 +1,10 @@
 pub use crate::api::optimizer::Optimizer;
 pub use crate::api::lr_scheduler::LRScheduler;
+pub use crate::api::Validator;
 pub use crate::core::optimizers::adam::Adam;
 pub use crate::core::optimizers::adamw::AdamW;
 pub use crate::core::optimizers::sgd::SGD;
-pub use crate::core::optimizers::grad_clip::{clip_grad_norm, clip_grad_value};
+pub use crate::core::optimizers::grad_clip::GradClipper;
 pub use crate::core::schedulers::step_lr::StepLR;
 pub use crate::core::schedulers::cosine_annealing_lr::CosineAnnealingLR;
 pub use crate::core::schedulers::warmup_cosine_scheduler::WarmupCosineScheduler;

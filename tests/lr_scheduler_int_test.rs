@@ -1,0 +1,48 @@
+// @allow: no_mocks_in_integration — concrete trait implementors needed to test LRScheduler contract
+use mloptim::{LRScheduler, Optimizer};
+use mlautograd::{MlResult, Tensor};
+
+struct MockOptimizer {
+    lr: f32,
+}
+
+impl Optimizer for MockOptimizer {
+    fn step(&mut self, _params: &mut [&mut Tensor]) -> MlResult<()> {
+        Ok(())
+    }
+    fn lr(&self) -> f32 {
+        self.lr
+    }
+    fn set_lr(&mut self, lr: f32) {
+        self.lr = lr;
+    }
+}
+
+struct FixedScheduler {
+    lr: f32,
+}
+
+impl LRScheduler for FixedScheduler {
+    fn step(&mut self, optimizer: &mut dyn Optimizer) {
+        optimizer.set_lr(self.lr);
+    }
+    fn get_lr(&self) -> f32 {
+        self.lr
+    }
+}
+
+// @covers: LRScheduler::step
+#[test]
+fn test_lr_scheduler_trait_fn_step_updates_optimizer_lr() {
+    let mut scheduler = FixedScheduler { lr: 0.05 };
+    let mut opt = MockOptimizer { lr: 0.1 };
+    scheduler.step(&mut opt);
+    assert!((opt.lr() - 0.05).abs() < f32::EPSILON);
+}
+
+// @covers: LRScheduler::get_lr
+#[test]
+fn test_lr_scheduler_trait_fn_get_lr_returns_scheduled_value() {
+    let scheduler = FixedScheduler { lr: 0.05 };
+    assert!((scheduler.get_lr() - 0.05).abs() < f32::EPSILON);
+}

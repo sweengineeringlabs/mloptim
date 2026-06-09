@@ -4,7 +4,25 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 authors = ["sweengineeringlabs <engineers@swelabs.io>"]
+repository = "https://github.com/sweengineeringlabs/mloptim"
+description = "Optimizers and LR schedulers for neural network training — Adam, AdamW, SGD, gradient clipping"
+keywords = ["machine-learning", "optimizer", "adam", "sgd", "gradient"]
+categories = ["science", "mathematics"]
+rust-version = "1.93"
+
+[lib]
+path = "src/lib.rs"
 
 [dependencies]
-swe-ml-tensor = { package = "llmtensor", git = "https://github.com/sweengineeringlabs/llmtensor", rev = "3f2fb98" }
 mlautograd = { git = "https://github.com/sweengineeringlabs/mlautograd" }
+
+[dev-dependencies]
+approx = "0.5"
+
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+
+[package.metadata.struct-engine]
+application_type = "lib"
+service_type = "optimizer"
